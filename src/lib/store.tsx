@@ -4,8 +4,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { Voter, User, Task, ActivityLog, DashboardStats, RegionStats } from './types';
 import { getInitialData } from './seed-data';
 
-const STORAGE_KEY = 'voter-crm-data-v2';
-const USER_KEY = 'voter-crm-user-v2';
+const STORAGE_KEY = 'voter-crm-data-v3';
+const USER_KEY = 'voter-crm-user-v3';
 
 // Simple UUID generator that works on all browsers including mobile
 function generateId(): string {
@@ -40,10 +40,16 @@ interface StoreContextType {
   addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void;
-  
+
+  // User management (admin)
+  addUser: (user: Omit<User, 'id' | 'createdAt' | 'totalContacts' | 'totalConversions' | 'isActive'>) => { ok: boolean; error?: string };
+  updateUser: (id: string, updates: Partial<User>) => { ok: boolean; error?: string };
+  deleteUser: (id: string) => void;
+
   // Auth
-  login: (email: string, password: string) => boolean;
+  login: (email: string, password: string) => { ok: boolean; error?: string };
   logout: () => void;
+  changeOwnPassword: (currentPassword: string, newPassword: string) => { ok: boolean; error?: string };
   
   // Stats
   getDashboardStats: () => DashboardStats;
@@ -180,20 +186,73 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setTasks(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const login = useCallback((email: string, _password: string) => {
-    const user = users.find(u => u.email === email);
-    if (user) {
-      setCurrentUser(user);
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
-      return true;
-    }
-    return false;
+  const login = useCallback((email: string, password: string) => {
+    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (!user) return { ok: false, error: 'Email nuk ekziston' };
+    if (!user.isActive) return { ok: false, error: 'Llogaria është çaktivizuar' };
+    if (user.password !== password) return { ok: false, error: 'Fjalëkalimi nuk është i saktë' };
+    setCurrentUser(user);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    return { ok: true };
   }, [users]);
 
   const logout = useCallback(() => {
     setCurrentUser(null);
     localStorage.removeItem(USER_KEY);
   }, []);
+
+  const addUser = useCallback((userData: Omit<User, 'id' | 'createdAt' | 'totalContacts' | 'totalConversions' | 'isActive'>) => {
+    const email = userData.email.trim().toLowerCase();
+    if (!email || !userData.password || !userData.name.trim()) {
+      return { ok: false, error: 'Emri, email dhe fjalëkalimi janë të detyrueshëm' };
+    }
+    if (users.some(u => u.email.toLowerCase() === email)) {
+      return { ok: false, error: 'Ky email është tashmë i regjistruar' };
+    }
+    const newUser: User = {
+      ...userData,
+      email,
+      id: generateId(),
+      isActive: true,
+      totalContacts: 0,
+      totalConversions: 0,
+      createdAt: new Date().toISOString(),
+    };
+    setUsers(prev => [...prev, newUser]);
+    return { ok: true };
+  }, [users]);
+
+  const updateUser = useCallback((id: string, updates: Partial<User>) => {
+    if (updates.email) {
+      const email = updates.email.trim().toLowerCase();
+      if (users.some(u => u.id !== id && u.email.toLowerCase() === email)) {
+        return { ok: false, error: 'Ky email është tashmë i regjistruar' };
+      }
+      updates = { ...updates, email };
+    }
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
+    if (currentUser?.id === id) {
+      const updated = { ...currentUser, ...updates };
+      setCurrentUser(updated);
+      localStorage.setItem(USER_KEY, JSON.stringify(updated));
+    }
+    return { ok: true };
+  }, [users, currentUser]);
+
+  const deleteUser = useCallback((id: string) => {
+    setUsers(prev => prev.filter(u => u.id !== id));
+  }, []);
+
+  const changeOwnPassword = useCallback((currentPassword: string, newPassword: string) => {
+    if (!currentUser) return { ok: false, error: 'Nuk jeni i identifikuar' };
+    if (currentUser.password !== currentPassword) return { ok: false, error: 'Fjalëkalimi aktual nuk është i saktë' };
+    if (!newPassword || newPassword.length < 6) return { ok: false, error: 'Fjalëkalimi i ri duhet të ketë të paktën 6 karaktere' };
+    const updated = { ...currentUser, password: newPassword };
+    setUsers(prev => prev.map(u => u.id === currentUser.id ? updated : u));
+    setCurrentUser(updated);
+    localStorage.setItem(USER_KEY, JSON.stringify(updated));
+    return { ok: true };
+  }, [currentUser]);
 
   const getDashboardStats = useCallback((): DashboardStats => {
     const now = new Date();
@@ -263,7 +322,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       voters, users, tasks, activityLogs, currentUser, isLoading,
       addVoter, updateVoter, deleteVoter, addVoterNote, updateVoterStatus,
       addTask, updateTask, deleteTask,
-      login, logout,
+      addUser, updateUser, deleteUser,
+      login, logout, changeOwnPassword,
       getDashboardStats, getRegionStats,
       addActivityLog,
     }}>

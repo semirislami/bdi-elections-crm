@@ -14,7 +14,15 @@ import VoterDetailModal from '@/components/modals/VoterDetailModal';
 type Tab = 'priority' | 'search' | 'recent';
 
 export default function FieldInterface() {
-  const { voters, updateVoterStatus, addVoterNote, currentUser } = useStore();
+  const { voters: allVoters, updateVoterStatus, addVoterNote, currentUser } = useStore();
+
+  // Activists only see voters in their assigned region(s).
+  const voters = useMemo(() => {
+    if (currentUser?.role !== 'activist') return allVoters;
+    const allowed = new Set(currentUser.assignedRegions);
+    if (allowed.size === 0 && currentUser.region) allowed.add(currentUser.region);
+    return allVoters.filter(v => allowed.has(v.city));
+  }, [allVoters, currentUser]);
   const [activeTab, setActiveTab] = useState<Tab>('priority');
   const [search, setSearch] = useState('');
   const [selectedVoter, setSelectedVoter] = useState<Voter | null>(null);

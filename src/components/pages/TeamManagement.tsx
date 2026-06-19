@@ -2,18 +2,33 @@
 
 import { useState, useMemo } from 'react';
 import { useStore } from '@/lib/store';
+import { User, UserRole } from '@/lib/types';
 import {
-  UsersRound, Trophy, MapPin, Phone, Mail, CheckCircle2,
-  TrendingUp, Star, Crown, Medal, Award, Target,
-  BarChart3,
+  UsersRound, Trophy, MapPin, Phone, Mail,
+  Star, Crown, Medal, Award, Target,
+  BarChart3, Plus, Edit3, Trash2, X, Eye, EyeOff, UserPlus,
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function TeamManagement() {
-  const { users, tasks, voters } = useStore();
+  const { users, tasks, voters, currentUser, deleteUser } = useStore();
   const activists = users.filter(u => u.role === 'activist');
   const managers = users.filter(u => u.role === 'manager');
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const canManage = currentUser?.role === 'admin';
+
+  const handleDelete = (user: User) => {
+    if (user.id === currentUser?.id) {
+      alert('Nuk mund të fshini llogarinë tuaj.');
+      return;
+    }
+    if (confirm(`Fshini ${user.name}? Ky veprim nuk mund të zhbëhet.`)) {
+      deleteUser(user.id);
+    }
+  };
 
   // Leaderboard data
   const leaderboard = useMemo(() => {
@@ -51,11 +66,19 @@ export default function TeamManagement() {
   return (
     <div className="page-container">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-surface-900">Menaxhimi i Ekipit</h1>
-        <p className="text-surface-500 text-sm mt-1">
-          {activists.length} aktivistë • {managers.length} menaxherë
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-surface-900">Menaxhimi i Ekipit</h1>
+          <p className="text-surface-500 text-sm mt-1">
+            {activists.length} aktivistë • {managers.length} menaxherë
+          </p>
+        </div>
+        {canManage && (
+          <button onClick={() => setShowCreateModal(true)} className="btn-primary">
+            <UserPlus className="w-4 h-4" />
+            <span>Shto Anëtar</span>
+          </button>
+        )}
       </div>
 
       {/* Leaderboard */}
@@ -143,8 +166,33 @@ export default function TeamManagement() {
                 <Target className="w-3.5 h-3.5" />
                 <span className="text-sm font-bold">{activist.score}</span>
               </div>
+
+              {/* Admin actions */}
+              {canManage && (
+                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => setEditingUser(activist)}
+                    className="p-1.5 rounded-lg hover:bg-primary-100 text-surface-400 hover:text-primary-600 pressable"
+                    title="Modifiko"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(activist)}
+                    className="p-1.5 rounded-lg hover:bg-red-100 text-surface-400 hover:text-red-600 pressable"
+                    title="Fshi"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
+          {activists.length === 0 && (
+            <div className="text-center py-8 text-sm text-surface-400">
+              Asnjë aktivist ende. {canManage && 'Klikoni "Shto Anëtar" për të krijuar të parin.'}
+            </div>
+          )}
         </div>
       </div>
 
@@ -232,13 +280,179 @@ export default function TeamManagement() {
                   </span>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-sm font-bold text-primary-700">{manager.totalContacts}</div>
-                <div className="text-[10px] text-surface-400">kontakte</div>
-              </div>
+              {canManage && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setEditingUser(manager)}
+                    className="p-1.5 rounded-lg hover:bg-primary-100 text-surface-400 hover:text-primary-600 pressable"
+                    title="Modifiko"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(manager)}
+                    className="p-1.5 rounded-lg hover:bg-red-100 text-surface-400 hover:text-red-600 pressable"
+                    title="Fshi"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
+          {managers.length === 0 && (
+            <div className="text-center py-6 text-sm text-surface-400 col-span-full">
+              Asnjë menaxher ende.
+            </div>
+          )}
         </div>
+      </div>
+
+      {(showCreateModal || editingUser) && (
+        <TeamMemberModal
+          existing={editingUser}
+          onClose={() => { setShowCreateModal(false); setEditingUser(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function TeamMemberModal({ existing, onClose }: { existing: User | null; onClose: () => void }) {
+  const { addUser, updateUser } = useStore();
+  const isEdit = !!existing;
+  const [name, setName] = useState(existing?.name ?? '');
+  const [email, setEmail] = useState(existing?.email ?? '');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [role, setRole] = useState<UserRole>(existing?.role ?? 'activist');
+  const [region, setRegion] = useState(existing?.region ?? '');
+  const [regionsText, setRegionsText] = useState(existing?.assignedRegions.join(', ') ?? '');
+  const [phone, setPhone] = useState(existing?.phone ?? '');
+  const [error, setError] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    const assignedRegions = regionsText.split(',').map(s => s.trim()).filter(Boolean);
+
+    if (isEdit && existing) {
+      const updates: Partial<User> = { name, email, role, region, assignedRegions, phone };
+      if (password.trim()) updates.password = password.trim();
+      const res = updateUser(existing.id, updates);
+      if (!res.ok) { setError(res.error || 'Gabim'); return; }
+    } else {
+      if (!password.trim() || password.length < 6) {
+        setError('Fjalëkalimi duhet të ketë të paktën 6 karaktere');
+        return;
+      }
+      const res = addUser({
+        name, email, password, role, region,
+        assignedRegions, phone,
+      });
+      if (!res.ok) { setError(res.error || 'Gabim'); return; }
+    }
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm modal-backdrop" onClick={onClose} />
+      <div className="relative w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto shadow-2xl animate-modal-enter">
+        <div className="flex items-center justify-between p-5 border-b border-surface-100 sticky top-0 bg-white z-10">
+          <h2 className="text-lg font-bold text-surface-900">
+            {isEdit ? 'Modifiko Anëtarin' : 'Shto Anëtar të Ri'}
+          </h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-100 text-surface-400 pressable">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-surface-500 mb-1.5">Emri i plotë *</label>
+            <input value={name} onChange={e => setName(e.target.value)} required className="input-field" placeholder="P.sh. Filan Fisteku" />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-surface-500 mb-1.5">Email *</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required className="input-field" placeholder="emri@bdi.mk" />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-surface-500 mb-1.5">
+              Fjalëkalimi {isEdit ? '(lëre bosh për ta mbajtur atë aktual)' : '*'}
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required={!isEdit}
+                minLength={6}
+                className="input-field pr-10"
+                placeholder={isEdit ? '••••••' : 'Të paktën 6 karaktere'}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-600"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-surface-500 mb-1.5">Roli</label>
+              <select value={role} onChange={e => setRole(e.target.value as UserRole)} className="input-field">
+                <option value="activist">Aktivist</option>
+                <option value="manager">Menaxher</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-surface-500 mb-1.5">Telefoni</label>
+              <input value={phone} onChange={e => setPhone(e.target.value)} className="input-field" placeholder="+389 ..." />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-surface-500 mb-1.5">Rajoni kryesor</label>
+            <input value={region} onChange={e => setRegion(e.target.value)} className="input-field" placeholder="P.sh. Shkup" />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-surface-500 mb-1.5">
+              Rajonet e caktuara (ndaj me presje)
+            </label>
+            <input
+              value={regionsText}
+              onChange={e => setRegionsText(e.target.value)}
+              className="input-field"
+              placeholder="Shkup, Tetovë, Gostivar"
+            />
+            <p className="text-[11px] text-surface-400 mt-1">
+              Aktivistët do të shohin vetëm votuesit në këto rajone.
+            </p>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg border border-red-100 animate-scale-in">
+              {error}
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-2">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1">
+              Anulo
+            </button>
+            <button type="submit" className="btn-primary flex-1">
+              {isEdit ? 'Ruaj' : 'Krijo'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

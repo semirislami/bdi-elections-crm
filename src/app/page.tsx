@@ -61,9 +61,9 @@ function LoginPage() {
 
     await new Promise(resolve => setTimeout(resolve, 800));
 
-    const success = login(email, password);
-    if (!success) {
-      setError('Email ose fjalëkalimi nuk është i saktë');
+    const result = login(email, password);
+    if (!result.ok) {
+      setError(result.error || 'Email ose fjalëkalimi nuk është i saktë');
       setIsLoggingIn(false);
     }
   };

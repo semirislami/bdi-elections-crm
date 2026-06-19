@@ -7,6 +7,7 @@ const BOOTSTRAP_ADMIN: User = {
   id: 'admin-1',
   name: 'Administrator',
   email: 'admin@bdi.mk',
+  password: 'admin123',
   role: 'admin',
   region: 'All',
   assignedRegions: [],

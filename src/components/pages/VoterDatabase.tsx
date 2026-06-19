@@ -12,7 +12,15 @@ import VoterDetailModal from '@/components/modals/VoterDetailModal';
 import AddVoterModal from '@/components/modals/AddVoterModal';
 
 export default function VoterDatabase() {
-  const { voters, deleteVoter } = useStore();
+  const { voters: allVoters, deleteVoter, currentUser } = useStore();
+
+  // Activists only see voters in their assigned region(s).
+  const voters = useMemo(() => {
+    if (currentUser?.role !== 'activist') return allVoters;
+    const allowed = new Set(currentUser.assignedRegions);
+    if (allowed.size === 0 && currentUser.region) allowed.add(currentUser.region);
+    return allVoters.filter(v => allowed.has(v.city));
+  }, [allVoters, currentUser]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<PoliticalStatus | 'all'>('all');
   const [priorityFilter, setPriorityFilter] = useState<PriorityLevel | 'all'>('all');

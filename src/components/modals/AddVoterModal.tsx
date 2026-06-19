@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useStore } from '@/lib/store';
 import { PREDEFINED_TAGS } from '@/lib/types';
 import { X, UserPlus, MapPin, Phone, Tag } from 'lucide-react';
@@ -10,11 +10,20 @@ interface AddVoterModalProps {
 }
 
 export default function AddVoterModal({ onClose }: AddVoterModalProps) {
-  const { addVoter } = useStore();
+  const { addVoter, currentUser } = useStore();
+
+  // Activists can only assign voters to cities within their assigned regions.
+  const allowedCities = useMemo(() => {
+    if (currentUser?.role !== 'activist') return null;
+    const set = new Set(currentUser.assignedRegions);
+    if (set.size === 0 && currentUser.region) set.add(currentUser.region);
+    return Array.from(set);
+  }, [currentUser]);
+
   const [formData, setFormData] = useState({
     fullName: '',
     phone: '',
-    city: '',
+    city: allowedCities && allowedCities.length > 0 ? allowedCities[0] : '',
     neighborhood: '',
     age: '' as string | number,
     politicalStatus: 'undecided' as 'supporter' | 'opponent' | 'undecided',
@@ -104,15 +113,32 @@ export default function AddVoterModal({ onClose }: AddVoterModalProps) {
                 <label className="block text-sm font-medium text-surface-700 mb-1.5">Qyteti *</label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
-                  <input
-                    type="text"
-                    value={formData.city}
-                    onChange={e => setFormData({ ...formData, city: e.target.value })}
-                    className="input-field pl-10"
-                    placeholder="p.sh. Tetovë"
-                    required
-                  />
+                  {allowedCities ? (
+                    <select
+                      value={formData.city}
+                      onChange={e => setFormData({ ...formData, city: e.target.value })}
+                      className="input-field pl-10"
+                      required
+                    >
+                      {allowedCities.length === 0 && <option value="">Asnjë rajon i caktuar</option>}
+                      {allowedCities.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={formData.city}
+                      onChange={e => setFormData({ ...formData, city: e.target.value })}
+                      className="input-field pl-10"
+                      placeholder="p.sh. Tetovë"
+                      required
+                    />
+                  )}
                 </div>
+                {allowedCities && allowedCities.length === 0 && (
+                  <p className="text-[11px] text-red-500 mt-1">
+                    Adminit duhet t&apos;ju caktojë një rajon para se të mund të shtoni votues.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-surface-700 mb-1.5">Lagja</label>
